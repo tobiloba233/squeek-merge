@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Squeek Merge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Silkscreen:wght@400;700&display=swap">
+<style>
+/* Layout: one column on phones (live mode bar, board, controls, wheel strip, ladder);
+   from 900px the board sits left and the wheel strip and ladder sit right. */
+:root {
+  --ink: #0b0b12;
+  --panel: #13131c;
+  --raise: #1b1b27;
+  --line: #2b2b3c;
+  --fg: #efedf8;
+  --mute: #a3a1b9;
+  --purple: #a56bff;
+  --blue: #6c8dff;
+  --orange: #ff9f43;
+  --green: #37d391;
+  --red: #ff6b7a;
+  --display: 'Silkscreen', 'Courier New', monospace;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  color-scheme: dark;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+body {
+  margin: 0;
+  min-height: 100%;
+  background-color: var(--ink);
+  background-image: radial-gradient(rgba(165, 107, 255, 0.16) 1px, transparent 1.3px);
+  background-size: 14px 14px;
+  color: var(--fg);
+  font: 400 15px/1.5 var(--sans);
+  padding-block: 14px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button { font: inherit; color: inherit; }
+a { color: var(--orange); }
+.app { max-width: 1000px; margin: 0 auto; display: grid; gap: 14px; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; justify-content: space-between; }
+.logo { margin: 0; font: 700 clamp(26px, 8.2vw, 42px)/1 var(--display); letter-spacing: 0.04em; color: var(--fg); text-shadow: 0 0 22px rgba(255, 159, 67, 0.28); }
+.logo span { color: var(--orange); }
+.tag { margin: 6px 0 0; font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+.tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { min-height: 40px; min-width: 40px; padding: 0 14px; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; font: 500 12px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
+.chip:hover { border-color: var(--purple); }
+
+/* live mode bar */
+.mode { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: center; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.mode i { grid-row: span 2; width: 12px; height: 12px; border-radius: 50%; background: var(--mute); }
+.mode-name { font: 700 13px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; }
+.mode-sub { font-size: 13px; color: var(--mute); }
+.app[data-mode="surge"] .mode { border-color: rgba(255, 159, 67, 0.6); background: linear-gradient(90deg, rgba(255, 159, 67, 0.14), var(--panel) 70%); }
+.app[data-mode="surge"] .mode i { background: var(--orange); box-shadow: 0 0 12px var(--orange); animation: beat 1s ease-in-out infinite; }
+.app[data-mode="surge"] .mode-name { color: var(--orange); }
+.app[data-mode="nap"] .mode { border-color: rgba(108, 141, 255, 0.5); background: linear-gradient(90deg, rgba(108, 141, 255, 0.12), var(--panel) 70%); }
+.app[data-mode="nap"] .mode i { background: var(--blue); }
+.app[data-mode="nap"] .mode-name { color: var(--blue); }
+
+/* stage */
+.stage { display: grid; gap: 16px; align-items: start; }
+.play, .side { display: grid; gap: 12px; min-width: 0; }
+@media (min-width: 900px) {
+  .stage { grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 24px; }
+}
+
+.hud { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 520px; width: 100%; margin-inline: auto; position: relative; }
+.hud > div { padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.k { display: block; font: 500 10px/1.2 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--mute); }
+.hud b { display: block; font: 700 22px/1.2 var(--display); font-variant-numeric: tabular-nums; }
+.combo { position: absolute; right: 8px; top: -11px; padding: 2px 10px; background: var(--purple); color: #140c24; border-radius: 99px; font: 600 11px/1.6 var(--mono); letter-spacing: 0.06em; }
+
+.board-wrap { position: relative; width: 100%; max-width: 520px; margin-inline: auto; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(0, 1fr)); gap: clamp(4px, 1.6vw, 8px); padding: clamp(6px, 2vw, 10px); aspect-ratio: 1; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; transition: box-shadow 0.4s; }
+.app[data-mode="surge"] .board { box-shadow: 0 0 0 1px rgba(255, 159, 67, 0.55), 0 0 32px rgba(255, 159, 67, 0.16); }
+.tile { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 0; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.tile[data-l="1"] { --tint: #ead3ac; } .tile[data-l="2"] { --tint: #f4b860; } .tile[data-l="3"] { --tint: #f28c4c; } .tile[data-l="4"] { --tint: #ef6b73; }
+.tile[data-l="5"] { --tint: #a98bf5; } .tile[data-l="6"] { --tint: #6f84f2; } .tile[data-l="7"] { --tint: #46c8e0; } .tile[data-l="8"] { --tint: #ffd166; }
+.tile[data-l] { background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 18%, var(--raise)), var(--raise) 75%); }
+.tile:hover:not(:disabled) { border-color: var(--mute); }
+.tile:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.tile .spr { width: 80%; height: auto; image-rendering: pixelated; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.tile:not([data-l]) .spr { display: none; }
+.tile[data-l="8"] .spr { filter: drop-shadow(0 0 7px rgba(255, 209, 102, 0.8)); }
+.tile .lv { position: absolute; left: 5px; bottom: 3px; font: 600 clamp(9px, 2.6vw, 11px)/1 var(--mono); color: var(--mute); pointer-events: none; }
+.tile:not([data-l]) .lv, .tile:not(.rest) .zz { display: none; }
+.zz { position: absolute; right: 4px; top: 3px; padding: 1px 4px; background: #232845; color: var(--blue); border-radius: 5px; font: 700 clamp(9px, 2.6vw, 11px)/1.2 var(--mono); letter-spacing: 0.04em; pointer-events: none; }
+.tile.rest .spr { opacity: 0.5; filter: saturate(0.4); }
+.tile.sel { box-shadow: inset 0 0 0 2px var(--orange), 0 0 14px rgba(255, 159, 67, 0.35); }
+.tile.partner { border-color: var(--purple); box-shadow: inset 0 0 0 1px var(--purple); animation: pulse 1.1s ease-in-out infinite; }
+.tile.born .spr { animation: born 0.28s ease-out; }
+.tile.pop .spr { animation: pop 0.36s ease-out; }
+.float { position: absolute; left: 50%; top: 20%; z-index: 3; transform: translateX(-50%); padding: 2px 8px; border-radius: 99px; background: #141420; border: 1px solid var(--line); color: var(--fg); font: 700 13px/1.4 var(--mono); white-space: nowrap; pointer-events: none; animation: rise 1s ease-out forwards; }
+.float.surge { color: var(--orange); border-color: rgba(255, 159, 67, 0.6); }
+
+.banner { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 4; padding: 10px 14px; background: rgba(19, 19, 28, 0.96); border: 1px solid var(--purple); border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); animation: drop 0.3s ease-out; }
+.banner b { display: block; font: 700 13px/1.3 var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--purple); }
+.banner span { font-size: 13px; color: var(--mute); }
+
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; max-width: 520px; margin-inline: auto; }
+.btn { min-height: 46px; padding: 8px 10px; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; font: 500 12px/1.2 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--purple); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.primary { background: var(--orange); border-color: var(--orange); color: #1b1020; font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:focus-visible, .chip:focus-visible, a:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.hint { margin: 0; min-height: 1.5em; text-align: center; font-size: 13px; color: var(--mute); }
+
+/* side panels */
+.panel { padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
+.panel h2 { margin: 0; font: 700 13px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; }
+.live-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 99px; font: 600 11px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--mute); }
+.pill[data-s="surge"] { color: var(--green); border-color: rgba(55, 211, 145, 0.5); }
+.pill[data-s="surge"] i { background: var(--green); animation: beat 1s ease-in-out infinite; }
+.pill[data-s="nap"] { color: var(--blue); border-color: rgba(108, 141, 255, 0.5); }
+.pill[data-s="nap"] i { background: var(--blue); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 12px; }
+.stats div { min-width: 0; }
+.stats dt { font: 500 10px/1.2 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--mute); }
+.stats dd { margin: 2px 0 0; font: 600 16px/1.3 var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.bar { height: 10px; background: var(--raise); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+.bar > div { height: 100%; width: 0; background: repeating-linear-gradient(90deg, var(--purple) 0 6px, #7e4fd6 6px 8px); transition: width 0.6s; }
+.live-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; margin-top: 10px; font-size: 12px; color: var(--mute); }
+.explain { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--mute); }
+.explain.small { margin: 10px 0 0; font-size: 12px; }
+.barlabel { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; font: 500 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+.barlabel span:last-child { text-align: right; letter-spacing: 0; text-transform: none; color: var(--fg); }
+.bar.off > div { opacity: 0.25; }
+.simrow { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.simrow p { margin: 0 0 10px; font-size: 13px; color: var(--mute); }
+.simbtns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.simbtns .btn { min-height: 44px; padding: 6px 4px; font-size: 11px; }
+.simrow .btn.stop { width: 100%; margin-top: 8px; }
+
+.ladder { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.ladder li { display: grid; justify-items: center; gap: 4px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 10px; text-align: center; min-width: 0; }
+.ladder img { width: 34px; height: auto; image-rendering: pixelated; opacity: 0.4; }
+.ladder b { font: 600 11px/1 var(--mono); color: var(--mute); }
+.ladder small { font: 500 clamp(8.5px, 2.5vw, 10px)/1.2 var(--mono); letter-spacing: 0; color: var(--mute); overflow-wrap: normal; }
+.ladder li.on b { color: var(--orange); }
+.ladder li.on { border-color: rgba(255, 159, 67, 0.6); }
+.ladder li.on img { opacity: 1; }
+.ladder li.on small { color: var(--fg); }
+.foot { margin: 0; text-align: center; font: 500 11px/1.5 var(--mono); letter-spacing: 0.04em; color: var(--mute); }
+
+/* overlays */
+.overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(6, 6, 12, 0.78); }
+.sheet { width: 100%; max-width: 460px; max-height: 100%; overflow: auto; padding: 22px 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
+.sheet h2 { margin: 0 0 10px; font: 700 18px/1.25 var(--display); letter-spacing: 0.05em; text-wrap: balance; }
+.sheet h3 { margin: 16px 0 6px; font: 600 11px/1.3 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--orange); }
+.sheet p, .sheet li { color: var(--mute); }
+.sheet p { margin: 0 0 10px; }
+.sheet ul { margin: 0 0 10px; padding-left: 18px; }
+.sheet strong { color: var(--fg); font-weight: 600; }
+.sheet-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.sheet-actions .btn { flex: 1 1 120px; }
+.demo { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 6px 0 14px; padding: 14px; background: var(--ink); border: 1px solid var(--line); border-radius: 12px; font: 700 20px/1 var(--display); color: var(--mute); }
+.demo img { width: 56px; image-rendering: pixelated; }
+.demo .rested { opacity: 0.5; }
+.dots { display: flex; gap: 6px; margin-top: 14px; }
+.dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.dots i.on { background: var(--orange); }
+.endstats { display: flex; gap: 10px; margin: 12px 0 0; }
+.endstats div { flex: 1; padding: 10px 12px; background: var(--ink); border: 1px solid var(--line); border-radius: 10px; }
+.endstats b { display: block; font: 700 22px/1.2 var(--display); font-variant-numeric: tabular-nums; color: var(--fg); }
+.newbest { display: inline-block; margin-top: 10px; padding: 2px 10px; background: var(--orange); color: #1b1020; border-radius: 99px; font: 600 11px/1.6 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@keyframes beat { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes pulse { 0%, 100% { box-shadow: inset 0 0 0 1px var(--purple), 0 0 0 rgba(165, 107, 255, 0); } 50% { box-shadow: inset 0 0 0 2px var(--purple), 0 0 14px rgba(165, 107, 255, 0.45); } }
+@keyframes born { from { transform: scale(0.35); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes pop { 0% { transform: scale(0.6); } 55% { transform: scale(1.2); } 100% { transform: scale(1); } }
+@keyframes rise { from { transform: translate(-50%, 0); opacity: 1; } to { transform: translate(-50%, -34px); opacity: 0; } }
+@keyframes drop { from { transform: translateY(-10px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+</style>
+</head>
+<body>
+<noscript><p>Squeek Merge needs JavaScript. Please turn it on and reload.</p></noscript>
+<main class="app" id="app" data-mode="loading">
+  <header class="top">
+    <div>
+      <h1 class="logo">SQUEEK<span>MERGE</span></h1>
+      <p class="tag">Unofficial fan game · Sepolia testnet</p>
+    </div>
+    <div class="tools">
+      <button class="chip" id="btnHelp" type="button" aria-label="How to play">?</button>
+      <button class="chip" id="btnSound" type="button" aria-pressed="false">Sound off</button>
+      <button class="chip" id="btnAbout" type="button">About</button>
+    </div>
+  </header>
+
+  <section class="mode" id="modeBar" aria-live="polite">
+    <i aria-hidden="true"></i>
+    <span class="mode-name" id="modeName">Listening to the wheel</span>
+    <span class="mode-sub" id="modeSub">You can start playing right away.</span>
+  </section>
+
+  <div class="stage">
+    <section class="play" aria-label="Game">
+      <div class="hud">
+        <div><span class="k">Score</span><b id="score">0</b></div>
+        <div><span class="k">Best</span><b id="best">0</b></div>
+        <div><span class="k">Turn</span><b id="turn">0</b></div>
+        <span class="combo" id="combo" hidden>Combo ×2</span>
+      </div>
+      <div class="board-wrap">
+        <div class="board" id="board" role="group" aria-label="Squeek board, 5 by 5. Arrow keys move, Enter selects."></div>
+        <div class="banner" id="banner" role="status" hidden></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnUndo" type="button">Undo <span id="undoCount">3</span></button>
+        <button class="btn" id="btnNap" type="button">Nap · skip turn</button>
+        <button class="btn" id="btnNew" type="button">New game</button>
+      </div>
+      <p class="hint" id="hint" role="status" aria-live="polite">Tap a Squeek, then a neighbour with the same level.</p>
+    </section>
+
+    <aside class="side">
+      <section class="panel" aria-label="Squeektoshi live">
+        <div class="live-head">
+          <h2>Squeektoshi live</h2>
+          <span class="pill" id="pill" data-s="loading"><i aria-hidden="true"></i><span id="pillText">Connecting</span></span>
+        </div>
+        <p class="explain">Squeektoshi is the real hamster that powers Squeekchain. When he runs on his wheel, this game gets bonuses.</p>
+        <dl class="stats">
+          <div><dt>Speed</dt><dd id="rpm">—</dd></div>
+          <div><dt>Run today</dt><dd id="km">—</dd></div>
+          <div><dt>Block</dt><dd id="blk">—</dd></div>
+        </dl>
+        <div class="barlabel"><span>Next block</span><span id="liveNote">Waiting for data</span></div>
+        <div class="bar" id="bar" role="progressbar" aria-label="Progress to the next Squeek block" aria-valuemin="0" aria-valuemax="100"><div id="barFill"></div></div>
+        <p class="explain small">A new Squeek block lands each time this bar fills. If one lands while you play, you get a Block Bonus and two Pups are cleared.</p>
+        <div class="live-foot">
+          <a href="https://sepolia.squeekchain.com" target="_blank" rel="noopener">Watch the stream ↗</a>
+        </div>
+        <div class="simrow" id="simRow" hidden>
+          <p id="simText">The live wheel isn't loading here, so bonuses are off. Want to see how they work? Try a simulated demo:</p>
+          <div class="simbtns">
+            <button class="btn" type="button" data-demo="run">Wheel running</button>
+            <button class="btn" type="button" data-demo="rest">Wheel resting</button>
+            <button class="btn" type="button" data-demo="block">New block</button>
+          </div>
+          <button class="btn stop" type="button" data-demo="stop" id="simStop" hidden>Stop demo</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Squeek levels">
+        <h2>Evolution</h2>
+        <ul class="ladder" id="ladder"></ul>
+      </section>
+    </aside>
+  </div>
+
+  <p class="foot">Unofficial fan game. Testnet only, no monetary value.</p>
+</main>
+
+<div class="overlay" id="ovTutorial" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="tutTitle" id="tutSheet"></div>
+</div>
+
+<div class="overlay" id="ovAbout" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <h2 id="aboutTitle">About Squeek Merge</h2>
+    <p>Merge hamsters on a 5×5 board while the real Squeektoshi runs on the WHEELY9000. Squeekchain is a hamster-powered proof-of-work toychain on Ethereum Sepolia.</p>
+    <h3>How to play</h3>
+    <ul>
+      <li>Tap a Squeek, then tap a <strong>neighbour of the same level</strong> to merge them. The survivor moves up one level.</li>
+      <li>A freshly merged Squeek <strong>rests for 2 turns</strong> (zz) and cannot merge again, like a Squeek on the real chain.</li>
+      <li>One new <strong>Pup</strong> appears every turn. No merge available? Press <strong>Nap</strong> to pass the turn.</li>
+      <li>Reach <strong>Genesis</strong> (level 8) to win. Genesis is the top level and does not merge. Keep playing for score.</li>
+      <li>Bigger merges score more. Merging on back-to-back turns builds a <strong>combo</strong>.</li>
+      <li>You get 3 undos per run. The run ends when the board is full and nothing can merge.</li>
+    </ul>
+    <h3>Live wheel bonuses</h3>
+    <ul>
+      <li><strong>Power Surge:</strong> the wheel is running. All merge points are doubled.</li>
+      <li><strong>Nap Mode:</strong> the wheel is resting. Normal points. Naps are good too.</li>
+      <li><strong>Block Bonus:</strong> a new Squeek block lands while you play. Two Pups are cleared from the board.</li>
+      <li>If the wheel can't be reached, the game plays normally without bonuses. The Squeektoshi live panel then offers a <strong>simulated demo</strong> so you can see each bonus. Demo runs never count toward Best.</li>
+    </ul>
+    <h3>Keys</h3>
+    <p>Arrow keys move, Enter or Space selects, U undoes, N naps.</p>
+    <h3>Notes</h3>
+    <p>Unofficial fan game. Testnet only, no monetary value. It reads public, read-only data from api.squeekchain.com. No wallet, no payments, no tracking. It never asks the real hamster to run.</p>
+    <p><a href="https://squeekchain.com" target="_blank" rel="noopener">squeekchain.com</a> · <a href="https://sepolia.squeekchain.com" target="_blank" rel="noopener">sepolia.squeekchain.com</a></p>
+    <div class="sheet-actions"><button class="btn primary" type="button" data-close>Back to the game</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ovEnd" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="endTitle" id="endSheet"></div>
+</div>
+
+<script src="logic.js"></script>
+<script>
+(function () {
+  'use strict';
+  var L = window.SqueekLogic;
+  var API = 'https://api.squeekchain.com/v1/status';
+  var POLL_MS = 15000;
+  var KEY = 'squeekmerge.v1';
+  var N = L.SIZE;
+
+  /* ---------- storage (always optional) ---------- */
+  function load() { try { var r = localStorage.getItem(KEY); return r ? (JSON.parse(r) || {}) : {}; } catch (e) { return {}; } }
+  function save(patch) { try { var c = load(); for (var k in patch) c[k] = patch[k]; localStorage.setItem(KEY, JSON.stringify(c)); } catch (e) {} }
+  var prefs = load();
+  var best = Number(prefs.best) || 0;
+  var soundOn = prefs.sound === true;
+
+  /* ---------- pixel art, drawn in code ---------- */
+  var ROWS = [
+    '.oo......oo.',
+    'oaao....oaao',
+    'oaaooooooaao',
+    '.offffffffo.',
+    'offeffffeffo',
+    'offeffffeffo',
+    'occffnnffcco',
+    'offfbbbbfffo',
+    '.ofbbbbbbfo.',
+    '.oobbbbbboo.',
+    '..ooo..ooo..'
+  ];
+  var FUR = [null, '#ead3ac', '#f4b860', '#f28c4c', '#ef6b73', '#a98bf5', '#6f84f2', '#46c8e0', '#ffd166'];
+  var BELLY = [null, '#fff4de', '#fff0cf', '#ffe3c9', '#ffdbd8', '#ece4ff', '#dfe6ff', '#d8f7ff', '#fff3c4'];
+  var PX = { o: '#2b1d3f', e: '#171021', n: '#e8637a', c: '#ff9fb0', a: '#ffb8c6', s: '#4f7dff', r: '#ff5d6c', y: '#ffd166', w: '#ffffff', g: '#7ee7ff', p: '#8f5bff', k: '#ffcf4a', m: '#e2c9ff' };
+  function span(y, x1, x2, k) { var a = []; for (var x = x1; x <= x2; x++) a.push([x, y, k]); return a; }
+  var OV = {
+    2: span(8, 2, 9, 's'),
+    3: span(3, 1, 10, 'r'),
+    4: span(3, 1, 10, 'r').concat([[6, 0, 'y'], [5, 1, 'y'], [6, 1, 'y'], [5, 2, 'y']]),
+    5: span(3, 1, 10, 'g').concat([[2, 4, 'g'], [4, 4, 'g'], [2, 5, 'g'], [4, 5, 'g'], [7, 4, 'g'], [9, 4, 'g'], [7, 5, 'g'], [9, 5, 'g']]),
+    6: span(1, 4, 7, 'y').concat(span(2, 3, 8, 'y'), [[5, 0, 'w'], [6, 0, 'w']]),
+    7: span(1, 4, 7, 'k').concat([[4, 0, 'k'], [7, 0, 'k'], [0, 7, 'p'], [0, 8, 'p'], [0, 9, 'p'], [11, 7, 'p'], [11, 8, 'p'], [11, 9, 'p']]),
+    8: span(1, 4, 7, 'k').concat([[4, 0, 'k'], [7, 0, 'k'], [0, 0, 'm'], [11, 0, 'm'], [0, 10, 'm'], [11, 10, 'm']])
+  };
+  var SPR = [null];
+  (function buildSprites() {
+    for (var lvl = 1; lvl <= L.MAX_LEVEL; lvl++) {
+      var c = document.createElement('canvas');
+      c.width = 12; c.height = 11;
+      var g = c.getContext('2d');
+      for (var y = 0; y < ROWS.length; y++) {
+        for (var x = 0; x < 12; x++) {
+          var ch = ROWS[y].charAt(x);
+          if (ch === '.') continue;
+          g.fillStyle = ch === 'f' ? FUR[lvl] : ch === 'b' ? BELLY[lvl] : PX[ch];
+          g.fillRect(x, y, 1, 1);
+        }
+      }
+      (OV[lvl] || []).forEach(function (p) { g.fillStyle = PX[p[2]]; g.fillRect(p[0], p[1], 1, 1); });
+      var url = '';
+      try { url = c.toDataURL('image/png'); } catch (e) {}
+      SPR.push(url);
+    }
+  })();
+
+  /* ---------- state ---------- */
+  var S, sel = null, cursor = 12, history = [], undosLeft = 3, winShown = false, newArmed = false, newTimer = null;
+  var live = { state: 'loading', rpm: null, kmToday: null, blockHeight: null, blockProgress: null };
+  var lastHeight = null, pollTimer = null, lastFetchAt = 0, bannerTimer = null;
+  var tiles = [];
+  var demo = false, demoUsed = false;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var elApp = $('app'), elBoard = $('board'), elHint = $('hint');
+
+  /* ---------- sound (off by default) ---------- */
+  var ac = null, master = null;
+  function audio() {
+    try {
+      if (!ac) {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        master = ac.createGain();
+        master.gain.value = 0.9;
+        master.connect(ac.destination);
+      }
+    } catch (e) { ac = null; master = null; }
+    return ac;
+  }
+  // Browsers only start audio after a tap, so resume inside a tap handler.
+  function unlock() {
+    var a = audio();
+    if (!a) return Promise.resolve(null);
+    if (a.state === 'running') return Promise.resolve(a);
+    try { return a.resume().then(function () { return a; }, function () { return a; }); } catch (e) { return Promise.resolve(a); }
+  }
+  function tone(freq, dur, type, vol, delay) {
+    var a = ac; if (!a || !master) return;
+    try {
+      var t = a.currentTime + (delay || 0);
+      var o = a.createOscillator(), g = a.createGain();
+      o.type = type || 'square'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol || 0.2, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) {}
+  }
+  function blip(freq, dur, type, vol, delay) {
+    if (!soundOn) return;
+    if (ac && ac.state === 'running') tone(freq, dur, type, vol, delay);
+    else unlock().then(function () { if (soundOn) tone(freq, dur, type, vol, delay); });
+  }
+  function sndMerge(l) { blip(330 + l * 60, 0.12, 'square', 0.18); blip(520 + l * 90, 0.16, 'square', 0.18, 0.09); if (l >= 5) blip(780 + l * 60, 0.2, 'triangle', 0.22, 0.2); }
+  function sndNap() { blip(240, 0.22, 'triangle', 0.3); blip(190, 0.26, 'triangle', 0.3, 0.14); }
+  function sndBad() { blip(160, 0.16, 'sawtooth', 0.14); }
+  function sndWin() { [523, 659, 784, 1047].forEach(function (f, i) { blip(f, 0.2, 'square', 0.18, i * 0.12); }); }
+  function sndBlock() { blip(700, 0.1, 'square', 0.16); blip(940, 0.18, 'square', 0.16, 0.11); }
+  // Keep audio unlocked on any later tap (needed after a reload with sound already on).
+  document.addEventListener('pointerdown', function () { if (soundOn) unlock(); }, { passive: true });
+
+  /* ---------- board ---------- */
+  function say(msg) { elHint.textContent = msg || ''; }
+  var REASON = {
+    far: 'Squeeks have to be next to each other.',
+    level: 'Only Squeeks of the same level can merge.',
+    rest: 'A resting Squeek (zz) needs a turn off. Nap to pass a turn.',
+    max: 'Genesis is the top level. It does not merge.'
+  };
+
+  function buildBoard() {
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < L.CELLS; i++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tile';
+      b.dataset.i = String(i);
+      b.dataset.id = '';
+      b.tabIndex = i === cursor ? 0 : -1;
+      b.innerHTML = '<img class="spr" alt="" draggable="false"><span class="lv" aria-hidden="true"></span><span class="zz" aria-hidden="true">zz</span>';
+      b.addEventListener('click', onTile.bind(null, i));
+      b.addEventListener('focus', onTileFocus.bind(null, i));
+      frag.appendChild(b);
+      tiles.push(b);
+    }
+    elBoard.appendChild(frag);
+  }
+
+  function onTileFocus(i) {
+    if (cursor === i) return;
+    tiles[cursor].tabIndex = -1;
+    cursor = i;
+    tiles[i].tabIndex = 0;
+  }
+
+  function maxOnBoard() {
+    var m = 0;
+    S.board.forEach(function (c) { if (c && c.lvl > m) m = c.lvl; });
+    return m;
+  }
+
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+  function render() {
+    var partners = sel !== null ? L.readyPartners(S.board, sel) : [];
+    for (var i = 0; i < L.CELLS; i++) {
+      var t = tiles[i], c = S.board[i];
+      var id = c ? String(c.id) : '';
+      if (c && t.dataset.id !== id) {
+        t.classList.remove('born', 'pop');
+        restart(t, c.lvl === 1 ? 'born' : 'pop');
+      }
+      t.dataset.id = id;
+      if (c) { t.dataset.l = String(c.lvl); t.querySelector('.spr').src = SPR[c.lvl]; t.querySelector('.lv').textContent = String(c.lvl); }
+      else { t.removeAttribute('data-l'); t.querySelector('.spr').removeAttribute('src'); }
+      t.classList.toggle('rest', !!(c && c.cd > 0));
+      t.classList.toggle('sel', sel === i);
+      t.classList.toggle('partner', partners.indexOf(i) !== -1);
+      var rc = 'Row ' + (Math.floor(i / N) + 1) + ', column ' + (i % N + 1) + ': ';
+      t.setAttribute('aria-label', rc + (c ? L.levelName(c.lvl) + ', level ' + c.lvl + (c.cd > 0 ? ', resting ' + c.cd + ' more turn' + (c.cd > 1 ? 's' : '') : '') + (sel === i ? ', selected' : '') : 'empty'));
+    }
+    $('score').textContent = S.score.toLocaleString('en-US');
+    $('best').textContent = Math.max(best, S.score).toLocaleString('en-US');
+    $('turn').textContent = String(S.turn);
+    var cb = $('combo');
+    cb.hidden = !(S.combo > 0);
+    cb.textContent = 'Combo ×' + (S.combo + 1);
+    $('undoCount').textContent = String(undosLeft);
+    $('btnUndo').disabled = !(undosLeft > 0 && history.length > 0);
+    $('btnNap').disabled = !!S.over;
+    var top = maxOnBoard();
+    var li = $('ladder').children;
+    for (var k = 0; k < li.length; k++) li[k].classList.toggle('on', k + 1 <= top);
+  }
+
+  function buildLadder() {
+    var ul = $('ladder');
+    for (var l = 1; l <= L.MAX_LEVEL; l++) {
+      var li = document.createElement('li');
+      li.innerHTML = '<img alt="" src="' + SPR[l] + '"><b>' + l + '</b><small>' + L.levelName(l) + '</small>';
+      ul.appendChild(li);
+    }
+  }
+
+  function persistBest() {
+    if (!demoUsed && S && S.score > best) { best = S.score; save({ best: best }); }
+  }
+
+  function newRun() {
+    persistBest();
+    S = L.newGame(Math.random);
+    sel = null; history = []; undosLeft = 3; winShown = false; demoUsed = false;
+    say('Tap a Squeek, then a neighbour with the same level.');
+    render();
+  }
+
+  function floatAt(i, text, cls) {
+    var f = document.createElement('span');
+    f.className = 'float' + (cls ? ' ' + cls : '');
+    f.textContent = text;
+    tiles[i].appendChild(f);
+    setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 1000);
+  }
+
+  function onTile(i) {
+    if (S.over) return;
+    var cell = S.board[i];
+    if (sel === null) {
+      if (!cell) { say('Pick a Squeek first.'); return; }
+      if (cell.cd > 0) { say('Resting for ' + cell.cd + ' more turn' + (cell.cd > 1 ? 's' : '') + '. Nap to pass a turn.'); sndBad(); return; }
+      if (cell.lvl >= L.MAX_LEVEL) { say(REASON.max); return; }
+      sel = i;
+      say(L.readyPartners(S.board, i).length ? 'Now tap a highlighted neighbour.' : 'No matching neighbour yet. Pick another or Nap.');
+      render();
+      return;
+    }
+    if (sel === i) { sel = null; say(''); render(); return; }
+    var chk = L.canMerge(S, sel, i);
+    if (chk.ok) { doMerge(sel, i); return; }
+    if (cell && cell.cd === 0 && cell.lvl < L.MAX_LEVEL) {
+      sel = i;
+      say(L.readyPartners(S.board, i).length ? 'Switched. Tap a highlighted neighbour.' : 'No matching neighbour for that one.');
+    } else if (!cell) {
+      sel = null; say('');
+    } else {
+      say(REASON[chk.reason] || ''); sndBad();
+    }
+    render();
+  }
+
+  function doMerge(a, b) {
+    var mult = live.state === 'surge' ? 2 : 1;
+    var r = L.applyMerge(S, a, b, { rng: Math.random, mult: mult });
+    if (!r.ok) { say(REASON[r.reason] || ''); return; }
+    history.push(S);
+    if (history.length > 20) history.shift();
+    S = r.state; sel = null;
+    cursor = b;
+    render();
+    floatAt(b, '+' + r.points.toLocaleString('en-US') + (mult > 1 ? ' ×2' : ''), mult > 1 ? 'surge' : '');
+    sndMerge(r.newLvl);
+    say(L.levelName(r.newLvl) + '! It rests for ' + L.COOLDOWN + ' turns.');
+    afterMove(r.winNow);
+  }
+
+  function afterMove(winNow) {
+    persistBest();
+    if (winNow && !winShown) { winShown = true; sndWin(); setTimeout(function () { openEnd('win'); }, 450); return; }
+    if (S.over) setTimeout(function () { openEnd('over'); }, 450);
+  }
+
+  function undo() {
+    if (undosLeft < 1 || !history.length) { say('Nothing to undo.'); return; }
+    S = history.pop(); undosLeft--; sel = null;
+    say('Undone. ' + undosLeft + ' undo' + (undosLeft === 1 ? '' : 's') + ' left.');
+    render();
+  }
+
+  function nap() {
+    if (S.over) return;
+    var r = L.applyNap(S, Math.random);
+    if (!r.ok) return;
+    history.push(S);
+    if (history.length > 20) history.shift();
+    S = r.state; sel = null;
+    sndNap();
+    say(r.spawned ? 'Nap time. Resting Squeeks get a turn closer to waking, and a new Pup curls up.' : 'Nap time. The burrow is full, so no new Pup.');
+    render();
+    afterMove(false);
+  }
+
+  function newGameClick() {
+    if (S.turn > 0 && !S.over && !newArmed) {
+      newArmed = true;
+      $('btnNew').textContent = 'Tap again to restart';
+      clearTimeout(newTimer);
+      newTimer = setTimeout(disarmNew, 3000);
+      return;
+    }
+    disarmNew();
+    closeOverlay();
+    newRun();
+  }
+  function disarmNew() { newArmed = false; clearTimeout(newTimer); $('btnNew').textContent = 'New game'; }
+
+  /* ---------- overlays ---------- */
+  var openId = null, lastFocus = null;
+  function openOverlay(id) {
+    closeOverlay(true);
+    lastFocus = document.activeElement;
+    var ov = $(id); ov.hidden = false; openId = id;
+    var f = ov.querySelector('[data-autofocus]') || ov.querySelector('button');
+    if (f) f.focus();
+  }
+  function closeOverlay(keepFocus) {
+    if (!openId) return;
+    $(openId).hidden = true; openId = null;
+    if (!keepFocus && lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+  }
+
+  var tutStep = 0;
+  function tutHtml() {
+    var steps = [
+      { t: 'Merge two of a kind', body: '<div class="demo"><img alt="Pup" src="' + SPR[1] + '"><span>+</span><img alt="Pup" src="' + SPR[1] + '"><span>=</span><img alt="Scout" src="' + SPR[2] + '"></div><p>Tap a Squeek, then tap a <strong>neighbour at the same level</strong>. Highlighted tiles show what it can merge with. Reach <strong>Genesis</strong> (level 8) to win.</p>' },
+      { t: 'Rest and Nap', body: '<div class="demo"><img class="rested" alt="Resting Scout" src="' + SPR[2] + '"><span>zz</span></div><p>A freshly merged Squeek <strong>rests for 2 turns</strong>. One new Pup appears every turn. If nothing can merge, press <strong>Nap</strong> to pass the turn. You have 3 undos.</p>' },
+      { t: 'Play with the wheel', body: '<div class="demo"><span style="color:var(--orange)">×2</span></div><p>When Squeektoshi runs, <strong>Power Surge</strong> doubles your points. When a new Squeek block lands, <strong>Block Bonus</strong> clears 2 Pups. If the wheel can\'t be reached, you just play normally. Naps are good too.</p>' }
+    ];
+    var s = steps[tutStep], last = tutStep === steps.length - 1;
+    var dots = ''; for (var i = 0; i < steps.length; i++) dots += '<i class="' + (i === tutStep ? 'on' : '') + '"></i>';
+    return '<h2 id="tutTitle">' + (tutStep + 1) + ' of ' + steps.length + ' · ' + s.t + '</h2>' + s.body +
+      '<div class="dots" aria-hidden="true">' + dots + '</div>' +
+      '<div class="sheet-actions">' +
+      (tutStep > 0 ? '<button class="btn" type="button" data-tut="back">Back</button>' : '<button class="btn" type="button" data-tut="skip">Skip</button>') +
+      '<button class="btn primary" type="button" data-tut="next" data-autofocus>' + (last ? 'Start playing' : 'Next') + '</button></div>';
+  }
+  function showTutorial() { tutStep = 0; $('tutSheet').innerHTML = tutHtml(); openOverlay('ovTutorial'); }
+  $('tutSheet').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tut]'); if (!b) return;
+    var a = b.getAttribute('data-tut');
+    if (a === 'back') tutStep = Math.max(0, tutStep - 1);
+    else if (a === 'next' && tutStep < 2) tutStep++;
+    else { save({ tutorial: true }); closeOverlay(); return; }
+    $('tutSheet').innerHTML = tutHtml();
+    var f = $('tutSheet').querySelector('[data-autofocus]'); if (f) f.focus();
+  });
+
+  function openEnd(kind) {
+    var beat = !demoUsed && S.score > best;
+    persistBest();
+    var html;
+    if (kind === 'win') {
+      html = '<h2 id="endTitle">Genesis Squeek!</h2><p>You merged your way to the top level. Keep playing for a higher score, or start fresh.</p>' +
+        '<div class="endstats"><div><span class="k">Score</span><b>' + S.score.toLocaleString('en-US') + '</b></div><div><span class="k">Turns</span><b>' + S.turn + '</b></div></div>' +
+        '<div class="sheet-actions"><button class="btn primary" type="button" data-end="keep" data-autofocus>Keep playing</button><button class="btn" type="button" data-end="new">New game</button></div>';
+    } else {
+      html = '<h2 id="endTitle">The burrow is full</h2><p>No more merges are possible.' + (S.won ? ' You reached Genesis, nice run.' : ' Try for a higher level next time.') + '</p>' +
+        '<div class="endstats"><div><span class="k">Score</span><b>' + S.score.toLocaleString('en-US') + '</b></div><div><span class="k">Best</span><b>' + Math.max(best, S.score).toLocaleString('en-US') + '</b></div></div>' +
+        (beat ? '<span class="newbest">New best</span>' : '') +
+        '<div class="sheet-actions"><button class="btn primary" type="button" data-end="new" data-autofocus>Play again</button></div>';
+    }
+    $('endSheet').innerHTML = html;
+    openOverlay('ovEnd');
+  }
+  $('endSheet').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-end]'); if (!b) return;
+    if (b.getAttribute('data-end') === 'new') { closeOverlay(true); newRun(); tiles[cursor].focus(); }
+    else closeOverlay();
+  });
+
+  document.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', function () { closeOverlay(); }); });
+  ['ovTutorial', 'ovAbout', 'ovEnd'].forEach(function (id) {
+    $(id).addEventListener('click', function (e) { if (e.target === $(id)) { if (id === 'ovTutorial') save({ tutorial: true }); closeOverlay(); } });
+  });
+
+  /* ---------- keyboard ---------- */
+  document.addEventListener('keydown', function (e) {
+    if (openId) {
+      if (e.key === 'Escape') { if (openId === 'ovTutorial') save({ tutorial: true }); closeOverlay(); return; }
+      if (e.key === 'Tab') {
+        var f = $(openId).querySelectorAll('button, a[href]');
+        if (!f.length) return;
+        var first = f[0], lastEl = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); lastEl.focus(); }
+        else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); first.focus(); }
+      }
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key;
+    if (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight') {
+      if (!elBoard.contains(document.activeElement)) { if (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return; }
+      e.preventDefault();
+      var r = Math.floor(cursor / N), c = cursor % N;
+      if (k === 'ArrowUp' && r > 0) r--; else if (k === 'ArrowDown' && r < N - 1) r++;
+      else if (k === 'ArrowLeft' && c > 0) c--; else if (k === 'ArrowRight' && c < N - 1) c++;
+      tiles[r * N + c].focus();
+      return;
+    }
+    k = k.toLowerCase();
+    if (k === 'u') undo(); else if (k === 'n') nap();
+  });
+
+  /* ---------- live wheel ---------- */
+  function renderLive() {
+    var s = live.state;
+    var real = s === 'surge' || s === 'nap';
+    var mode = real ? s : s === 'loading' ? 'loading' : 'offline';
+    elApp.setAttribute('data-mode', mode);
+    var tag = demo ? ' · demo' : '';
+    var name, sub, pill;
+    if (s === 'surge') { name = 'Power Surge' + tag; sub = (demo ? 'Simulated demo. ' : '') + '×2 points' + (live.rpm !== null ? ' · ' + live.rpm.toFixed(1) + ' rpm' : '') + '. Squeektoshi is on the wheel.'; pill = demo ? 'Demo' : 'Running'; }
+    else if (s === 'nap') { name = 'Nap Mode' + tag; sub = (demo ? 'Simulated demo. ' : '') + 'Squeektoshi is napping. Normal points. Naps are good too.'; pill = demo ? 'Demo' : 'Resting'; }
+    else if (s === 'loading') { name = 'Listening to the wheel'; sub = 'You can start playing right away.'; pill = 'Connecting'; }
+    else if (s === 'fault') { name = 'Wheel sensor paused'; sub = 'Playing normally, no bonuses for now.'; pill = 'Paused'; }
+    else { name = "Can't reach the wheel right now"; sub = "Squeektoshi's live data isn't loading on this page. The game works normally, just without bonuses. It tries again every 15 seconds."; pill = 'Offline'; }
+    $('modeName').textContent = name;
+    $('modeSub').textContent = sub;
+    var p = $('pill'); p.setAttribute('data-s', real ? s : 'off');
+    $('pillText').textContent = pill;
+    $('rpm').textContent = real && live.rpm !== null ? live.rpm.toFixed(1) + ' rpm' : '—';
+    $('km').textContent = real && live.kmToday !== null ? live.kmToday.toFixed(2) + ' km' : '—';
+    $('blk').textContent = real ? (demo ? 'demo' : live.blockHeight !== null ? '#' + live.blockHeight.toLocaleString('en-US') : '—') : '—';
+    var pct = real && live.blockProgress !== null ? Math.round(live.blockProgress * 100) : null;
+    $('barFill').style.width = (pct === null ? 0 : pct) + '%';
+    var bar = $('bar');
+    bar.classList.toggle('off', pct === null);
+    if (pct === null) bar.removeAttribute('aria-valuenow'); else bar.setAttribute('aria-valuenow', String(pct));
+    $('liveNote').textContent = pct !== null ? pct + '% full' : s === 'loading' ? 'Connecting…' : real ? 'Not available' : 'No live data here';
+    $('simRow').hidden = real && !demo;
+    $('simStop').hidden = !demo;
+    $('simText').textContent = demo
+      ? 'This is a simulated demo, not real wheel data. Scores from this run will not count toward Best.'
+      : "The live wheel isn't loading here, so bonuses are off. Want to see how they work? Try a simulated demo:";
+  }
+
+  function showBanner(title, sub) {
+    var b = $('banner');
+    b.innerHTML = '<b></b><span></span>';
+    b.firstChild.textContent = title;
+    b.lastChild.textContent = sub;
+    b.hidden = false;
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(function () { b.hidden = true; }, 4500);
+  }
+
+  function blockBonus() {
+    if (S.over) return;
+    var r = L.applyBlockBonus(S, Math.random, 2);
+    S = r.state;
+    history = [];
+    if (sel !== null && !S.board[sel]) sel = null;
+    render();
+    sndBlock();
+    showBanner('A new Squeek block landed!', r.removed ? 'Block Bonus: ' + r.removed + ' Pup' + (r.removed > 1 ? 's' : '') + ' cleared.' : 'Block Bonus: no Pups to clear, the board is tidy.');
+  }
+
+  function applyLive(next) {
+    var realNext = next.state === 'surge' || next.state === 'nap';
+    if (demo) { if (!realNext) return; demo = false; }
+    var bonus = L.detectBlockBonus(lastHeight, next.blockHeight);
+    if (next.blockHeight !== null) lastHeight = next.blockHeight;
+    live = next;
+    renderLive();
+    if (bonus) blockBonus();
+  }
+  function setDemo(kind) {
+    if (kind === 'stop') { demo = false; live = offline(); renderLive(); say('Demo stopped.'); return; }
+    if (!demo) say("Demo on. These bonuses use simulated data, and this run won't count toward Best.");
+    demo = true; demoUsed = true;
+    if (kind === 'run') live = { state: 'surge', rpm: 14.2, kmToday: 1.82, blockHeight: null, blockProgress: 0.4 };
+    else if (kind === 'rest') live = { state: 'nap', rpm: 0, kmToday: 1.82, blockHeight: null, blockProgress: 0.4 };
+    else if (kind === 'block') {
+      if (live.state !== 'surge' && live.state !== 'nap') live = { state: 'nap', rpm: 0, kmToday: 1.82, blockHeight: null, blockProgress: 0.4 };
+      live = { state: live.state, rpm: live.rpm, kmToday: live.kmToday, blockHeight: null, blockProgress: 0.03 };
+    }
+    renderLive();
+    if (kind === 'block') blockBonus();
+    persistBest();
+  }
+  document.querySelectorAll('[data-demo]').forEach(function (b) { b.addEventListener('click', function () { setDemo(b.getAttribute('data-demo')); }); });
+  function offline() { return { state: 'unavailable', rpm: null, kmToday: null, blockHeight: null, blockProgress: null }; }
+
+  function schedule(ms) { clearTimeout(pollTimer); pollTimer = setTimeout(poll, ms); }
+  function poll() {
+    clearTimeout(pollTimer);
+    if (document.hidden) return;
+    lastFetchAt = Date.now();
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var to = setTimeout(function () { if (ctl) ctl.abort(); }, 8000);
+    var req;
+    try { req = fetch(API, { cache: 'no-store', signal: ctl ? ctl.signal : undefined }); }
+    catch (e) { clearTimeout(to); applyLive(offline()); schedule(POLL_MS); return; }
+    req.then(function (res) {
+      clearTimeout(to);
+      if (res.status === 429) { applyLive(offline()); schedule(L.parseRetryAfter(res.headers.get('Retry-After'))); return; }
+      if (!res.ok) throw new Error('http ' + res.status);
+      return res.json().then(function (d) { applyLive(L.parseStatus(d)); schedule(POLL_MS); });
+    }).catch(function () {
+      clearTimeout(to);
+      applyLive(offline());
+      schedule(POLL_MS);
+    });
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { clearTimeout(pollTimer); persistBest(); }
+    else schedule(Math.max(0, POLL_MS - (Date.now() - lastFetchAt)));
+  });
+  window.addEventListener('pagehide', persistBest);
+
+  /* ---------- buttons ---------- */
+  $('btnUndo').addEventListener('click', undo);
+  $('btnNap').addEventListener('click', nap);
+  $('btnNew').addEventListener('click', newGameClick);
+  $('btnHelp').addEventListener('click', showTutorial);
+  $('btnAbout').addEventListener('click', function () { openOverlay('ovAbout'); });
+  function paintSound() { var b = $('btnSound'); b.textContent = soundOn ? 'Sound on' : 'Sound off'; b.setAttribute('aria-pressed', soundOn ? 'true' : 'false'); }
+  $('btnSound').addEventListener('click', function () {
+    soundOn = !soundOn; save({ sound: soundOn }); paintSound();
+    if (soundOn) {
+      say('Sound on. If you hear nothing, check your phone volume and silent mode.');
+      unlock().then(function (a) {
+        if (!a) { say('Sound is not available in this browser.'); return; }
+        tone(523, 0.14, 'square', 0.22); tone(784, 0.2, 'square', 0.22, 0.12);
+      });
+    } else say('Sound off.');
+  });
+
+  /* ---------- go ---------- */
+  buildBoard();
+  buildLadder();
+  paintSound();
+  renderLive();
+  newRun();
+  poll();
+  if (prefs.tutorial !== true) showTutorial();
+})();
+</script>
+</body>
+</html>
